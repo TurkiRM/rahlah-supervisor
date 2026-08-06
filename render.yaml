@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: rahlah-supervisor
+    env: static
+    staticPublishPath: .
+    buildCommand: "echo 'no build step'"

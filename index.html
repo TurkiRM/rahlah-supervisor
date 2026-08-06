@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rahlah — Supervisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F2ECDC; --ink:#1C2620; --ink-soft:#5B6259; --panel:#FFFDF6;
+    --brand:#0F4C3A; --brand-deep:#0A362A; --gold:#C9992F;
+    --men:#2E3B58; --women:#A6486A; --line:#DFD5B8; --danger:#B0402F; --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px;}
+
+  /* login */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+  .login-card{background:var(--panel);border:1.5px solid var(--line);border-radius:20px;padding:36px 32px;width:100%;max-width:360px;}
+  .login-card h1{font-family:'Space Grotesk';font-size:20px;margin:0 0 6px;color:var(--brand-deep);}
+  .login-card p{font-size:13px;color:var(--ink-soft);margin:0 0 20px;}
+  .login-card input{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-family:'Inter';font-size:14px;margin-bottom:12px;}
+  .login-card button{width:100%;background:var(--brand);color:#fff;border:none;border-radius:12px;padding:13px;font-family:'Space Grotesk';font-weight:600;font-size:14px;cursor:pointer;}
+  .login-error{color:var(--danger);font-size:12.5px;margin-top:10px;min-height:16px;}
+
+  /* dashboard */
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+  .brand{font-family:'Space Grotesk';font-weight:700;font-size:22px;color:var(--brand-deep);}
+  .brand small{display:block;font-family:'Inter';font-weight:500;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-soft);margin-top:2px;}
+  .top-right{display:flex;align-items:center;gap:14px;}
+  .conn{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);}
+  .conn .dot{width:8px;height:8px;border-radius:50%;background:#E5B25A;}
+  .conn .dot.live{background:#3F9A5C;}
+  .logout-btn{background:none;border:1.5px solid var(--line);color:var(--ink-soft);border-radius:10px;padding:8px 14px;font-family:'Space Grotesk';font-weight:600;font-size:12px;cursor:pointer;}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:26px;}
+  .stat-card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .stat-label{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-soft);}
+  .stat-value{font-family:'IBM Plex Mono';font-weight:600;font-size:24px;color:var(--brand-deep);margin-top:6px;}
+  .stat-value.alert{color:var(--danger);}
+
+  .section-title{font-family:'Space Grotesk';font-weight:600;font-size:16px;margin:30px 0 12px;color:var(--brand-deep);display:flex;align-items:center;gap:8px;}
+  .section-title .count{font-family:'IBM Plex Mono';font-size:12px;font-weight:500;color:var(--ink-soft);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
+
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.6px;color:var(--ink-soft);padding:10px 14px;border-bottom:1.5px solid var(--line);background:rgba(15,76,58,0.03);}
+  td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr.attn td{background:#FBEDE7;}
+  .empty-row td{color:var(--ink-soft);text-align:center;padding:22px;}
+
+  .badge{display:inline-block;font-family:'Space Grotesk';font-weight:600;font-size:11px;padding:3px 9px;border-radius:20px;}
+  .badge.forming{background:#EFE6C8;color:#7A5E12;}
+  .badge.ready{background:#DCEEE1;color:#1B6B3A;}
+  .badge.in_trip{background:#D9E4F2;color:#1E4A7A;}
+  .badge.completed{background:#E7E4DA;color:#6B6555;}
+  .badge.attn{background:var(--danger);color:#fff;}
+  .badge.private{background:var(--gold);color:var(--brand-deep);}
+  .badge.online{background:#DCEEE1;color:#1B6B3A;}
+  .badge.offline{background:#E7E4DA;color:#6B6555;}
+  .mono{font-family:'IBM Plex Mono';font-size:12px;}
+  .mini-seats{display:flex;gap:3px;flex-wrap:wrap;max-width:160px;}
+  .mini-seat{width:16px;height:16px;border-radius:4px;border:1.5px dashed #D3CBAF;background:#FBF8EE;}
+  .mini-seat.men{background:var(--men);border-color:var(--men);}
+  .mini-seat.women{background:var(--women);border-color:var(--women);}
+  .mini-seat.private{background:var(--gold);border-color:var(--gold);}
+  .route-tag{font-size:11px;color:var(--ink-soft);}
+  .refresh-note{font-size:11.5px;color:var(--ink-soft);margin-top:8px;}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginScreen">
+  <div class="login-card">
+    <h1>Rahlah Supervisor</h1>
+    <p>Read-only live view of every car and captain on the network. Enter the shared
+      supervisor password to continue.</p>
+    <input type="text" id="usernameInput" placeholder="Username" autocomplete="username" />
+    <input type="password" id="passwordInput" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()" style="margin-top:10px;" />
+    <button onclick="doLogin()">View live operations</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div class="wrap" id="dashboard" style="display:none;">
+  <header class="top">
+    <div class="brand">Rahlah <small>Supervisor · read-only</small></div>
+    <div class="top-right">
+      <div class="conn"><span class="dot" id="connDot"></span><span id="connText">Connecting…</span></div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </header>
+
+  <div class="stat-grid" id="statGrid"></div>
+
+  <div class="section-title">Needs attention <span class="count" id="attnCount">0</span></div>
+  <table><thead><tr>
+    <th>Vehicle</th><th>Route</th><th>Seats</th><th>Status</th><th>Waiting</th>
+  </tr></thead><tbody id="attnBody"></tbody></table>
+
+  <div class="section-title">Live cars <span class="count" id="carsCount">0</span></div>
+  <table><thead><tr>
+    <th>Vehicle</th><th>Mode</th><th>Route</th><th>Seats</th><th>Status</th><th>Captain</th><th>Age</th>
+  </tr></thead><tbody id="carsBody"></tbody></table>
+
+  <div class="section-title">Captains <span class="count" id="captainsCount">0</span></div>
+  <table><thead><tr>
+    <th>Name</th><th>Vehicle</th><th>Route</th><th>Status</th><th>Current car</th><th>Earnings today</th><th>Trips today</th>
+  </tr></thead><tbody id="captainsBody"></tbody></table>
+
+  <div class="section-title">Pending private bookings <span class="count" id="pendingCount">0</span></div>
+  <table><thead><tr><th>Route / vehicle</th><th>Waiting</th></tr></thead><tbody id="pendingBody"></tbody></table>
+
+  <div class="section-title">Recent completed trips <span class="count" id="tripsCount">0</span></div>
+  <table><thead><tr><th>Vehicle</th><th>Mode</th><th>Route</th><th>Seats</th><th>Fare</th><th>Completed</th></tr></thead><tbody id="tripsBody"></tbody></table>
+
+  <div class="refresh-note">Auto-refreshing every 4 seconds.</div>
+</div>
+
+<script>
+const VEHICLE_ICONS = { sedan:'🚗', family:'🚙', minibus:'🚐' };
+let VEHICLES = {};
+// ===== EDIT THIS BEFORE DEPLOYING AS ITS OWN STATIC SITE =====
+// Leave blank for local dev (falls back to http://localhost:3000) or if this
+// file is served by the same server as the API. If deployed separately, set
+// this to your backend's URL, e.g. 'https://rahlah-backend.onrender.com'.
+const CONFIGURED_API_BASE = '';
+// ===============================================================
+let API_BASE = CONFIGURED_API_BASE || (location.hostname === 'localhost' ? 'http://localhost:3000' : '');
+let token = localStorage.getItem('rahlah_supervisor_token') || null;
+const STUCK_MS = 45 * 1000; // flag a forming, uncaptained car as "needs attention" past this age
+
+function fmtRoute(d){ return d==='A_TO_B' ? 'A → B' : 'B → A'; }
+function fmtAge(ms){
+  const s = Math.floor(ms/1000);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s/60);
+  if (m < 60) return m + 'm ' + (s%60) + 's';
+  return Math.floor(m/60) + 'h ' + (m%60) + 'm';
+}
+function fmtTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+function seatsFilled(car){
+  return car.front.filter(s=>s!==null).length + car.rows.reduce((n,r)=>n+r.seats.filter(s=>s!==null).length,0);
+}
+function totalSeats(vtype){ const c = VEHICLES[vtype]; return c.frontSeats + c.rows*3; }
+function miniSeats(car){
+  const cells = [];
+  car.front.forEach(f=> cells.push(f));
+  car.rows.forEach(r=> r.seats.forEach(s=> cells.push(s)));
+  return `<div class="mini-seats">${cells.map(s=>`<div class="mini-seat ${s?s:''}"></div>`).join('')}</div>`;
+}
+
+async function doLogin(){
+  const username = document.getElementById('usernameInput').value;
+  const password = document.getElementById('passwordInput').value;
+  document.getElementById('loginError').textContent = '';
+  try{
+    const res = await fetch(API_BASE + '/api/supervisor/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
+    const data = await res.json();
+    if (!res.ok){ document.getElementById('loginError').textContent = data.error || 'Could not log in.'; return; }
+    token = data.token;
+    localStorage.setItem('rahlah_supervisor_token', token);
+    enterDashboard();
+  } catch(e){ document.getElementById('loginError').textContent = "Couldn't reach the server."; }
+}
+function logout(){
+  token = null;
+  localStorage.removeItem('rahlah_supervisor_token');
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+async function enterDashboard(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  if (!Object.keys(VEHICLES).length) VEHICLES = await fetch(API_BASE + '/api/vehicles').then(r=>r.json());
+  refresh();
+  setInterval(refresh, 4000);
+}
+
+async function refresh(){
+  try{
+    const res = await fetch(API_BASE + '/api/supervisor/overview', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (res.status === 401){ logout(); return; }
+    const data = await res.json();
+    document.getElementById('connDot').classList.add('live');
+    document.getElementById('connText').textContent = 'Live · updated ' + fmtTime(data.now);
+    render(data);
+  } catch(e){
+    document.getElementById('connDot').classList.remove('live');
+    document.getElementById('connText').textContent = 'Connection lost — retrying…';
+  }
+}
+
+function render(data){
+  const cars = data.cars;
+  const captains = data.captains;
+  const now = data.now;
+
+  const onlineCaptains = captains.filter(c=>c.status==='online').length;
+  const idleCaptains = captains.filter(c=>c.status==='online' && !c.currentCarId).length;
+  const activeCars = cars.filter(c=>c.status!=='completed').length;
+  const attn = cars.filter(c => c.mode==='shared' && c.status==='forming' && !c.captainId && seatsFilled(c)>0 && (now-c.createdAt)>STUCK_MS);
+  const todayTrips = data.trips.length;
+  const todayRevenue = data.trips.reduce((s,t)=>s+t.fare,0);
+
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Captains online</div><div class="stat-value">${onlineCaptains}</div></div>
+    <div class="stat-card"><div class="stat-label">Idle right now</div><div class="stat-value">${idleCaptains}</div></div>
+    <div class="stat-card"><div class="stat-label">Active cars</div><div class="stat-value">${activeCars}</div></div>
+    <div class="stat-card"><div class="stat-label">Needs attention</div><div class="stat-value ${attn.length?'alert':''}">${attn.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Trips today</div><div class="stat-value">${todayTrips}</div></div>
+    <div class="stat-card"><div class="stat-label">Revenue today</div><div class="stat-value">${todayRevenue} SAR</div></div>
+  `;
+
+  document.getElementById('attnCount').textContent = attn.length;
+  document.getElementById('attnBody').innerHTML = attn.length ? attn.map(c => `
+    <tr class="attn">
+      <td>${VEHICLE_ICONS[c.vehicleType]} ${VEHICLES[c.vehicleType].name}</td>
+      <td class="route-tag">${fmtRoute(c.direction)}</td>
+      <td>${miniSeats(c)}</td>
+      <td><span class="badge attn">No captain</span></td>
+      <td class="mono">${fmtAge(now-c.createdAt)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="5">Nothing stuck — all clear.</td></tr>`;
+
+  const sortedCars = [...cars].filter(c=>c.status!=='completed').sort((a,b)=>b.createdAt-a.createdAt);
+  document.getElementById('carsCount').textContent = sortedCars.length;
+  document.getElementById('carsBody').innerHTML = sortedCars.length ? sortedCars.map(c => `
+    <tr>
+      <td>${VEHICLE_ICONS[c.vehicleType]} ${VEHICLES[c.vehicleType].name}</td>
+      <td>${c.mode==='private' ? '<span class="badge private">Private</span>' : 'Shared'}</td>
+      <td class="route-tag">${fmtRoute(c.direction)}</td>
+      <td>${miniSeats(c)} <span class="mono" style="color:var(--ink-soft);">${seatsFilled(c)}/${totalSeats(c.vehicleType)}</span></td>
+      <td><span class="badge ${c.status}">${c.status.replace('_',' ')}</span></td>
+      <td>${c.captainName ? c.captainName + ' · ' + (c.captainPlate||'—') : '<span style="color:var(--ink-soft);">unassigned</span>'}</td>
+      <td class="mono">${fmtAge(now-c.createdAt)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">No active cars right now.</td></tr>`;
+
+  const sortedCaptains = [...captains].sort((a,b)=> (b.status==='online')-(a.status==='online'));
+  document.getElementById('captainsCount').textContent = captains.length;
+  document.getElementById('captainsBody').innerHTML = sortedCaptains.length ? sortedCaptains.map(cap => `
+    <tr>
+      <td>${cap.name} <span class="mono" style="color:var(--ink-soft);">${cap.plate}</span></td>
+      <td>${VEHICLE_ICONS[cap.vehicleType]} ${VEHICLES[cap.vehicleType].name}</td>
+      <td class="route-tag">${fmtRoute(cap.direction)}</td>
+      <td><span class="badge ${cap.status}">${cap.status}</span></td>
+      <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
+      <td class="mono">${cap.earnings} SAR</td>
+      <td class="mono">${cap.tripHistory.length}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">No captains have gone online yet.</td></tr>`;
+
+  const pendingRows = [];
+  Object.entries(data.pendingPrivate||{}).forEach(([k, list])=>{
+    if (!list.length) return;
+    const [vtype, dir] = k.split('_');
+    // direction is A_TO_B or B_TO_A, but our key join used vehicleType_direction — direction itself contains an underscore,
+    // so split carefully: vehicleType is the first token, the rest is the direction.
+    const direction = k.slice(vtype.length + 1);
+    pendingRows.push(`<tr><td>${VEHICLE_ICONS[vtype]} ${VEHICLES[vtype].name} · ${fmtRoute(direction)}</td><td class="mono">${list.length}</td></tr>`);
+  });
+  document.getElementById('pendingCount').textContent = pendingRows.length;
+  document.getElementById('pendingBody').innerHTML = pendingRows.length ? pendingRows.join('') : `<tr class="empty-row"><td colspan="2">No private bookings waiting on a captain.</td></tr>`;
+
+  const trips = data.trips.slice(0, 20);
+  document.getElementById('tripsCount').textContent = data.trips.length;
+  document.getElementById('tripsBody').innerHTML = trips.length ? trips.map(t => `
+    <tr>
+      <td>${VEHICLE_ICONS[t.vehicleType]} ${VEHICLES[t.vehicleType].name}</td>
+      <td>${t.mode==='private' ? '<span class="badge private">Private</span>' : 'Shared'}</td>
+      <td class="route-tag">${fmtRoute(t.direction)}</td>
+      <td>${t.seats}</td>
+      <td class="mono">${t.fare} SAR</td>
+      <td class="mono">${fmtTime(t.completedAt)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No completed trips yet.</td></tr>`;
+}
+
+if (token){ enterDashboard(); }
+</script>
+</body>
+</html>
