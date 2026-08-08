@@ -6,6 +6,7 @@
 <title>Rahlah — Supervisor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <style>
   :root{
     --bg:#F2ECDC; --ink:#1C2620; --ink-soft:#5B6259; --panel:#FFFDF6;
@@ -38,6 +39,10 @@
 
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:26px;}
   .stat-card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .map-card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:10px;}
+  #fleetMap{width:100%;height:340px;background:var(--bg);}
+  .leaflet-marker-icon.captain-pin{background:var(--brand);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .leaflet-marker-icon.point-pin{background:var(--gold);border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.25);}
   .stat-label{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-soft);}
   .stat-value{font-family:'IBM Plex Mono';font-weight:600;font-size:24px;color:var(--brand-deep);margin-top:6px;}
   .stat-value.alert{color:var(--danger);}
@@ -96,6 +101,11 @@
 
   <div class="stat-grid" id="statGrid"></div>
 
+  <div class="section-title">Live fleet map <span class="count" id="fleetCount">0</span></div>
+  <div class="map-card">
+    <div id="fleetMap"></div>
+  </div>
+
   <div class="section-title">Needs attention <span class="count" id="attnCount">0</span></div>
   <table><thead><tr>
     <th>Vehicle</th><th>Route</th><th>Seats</th><th>Status</th><th>Waiting</th>
@@ -120,6 +130,7 @@
   <div class="refresh-note">Auto-refreshing every 4 seconds.</div>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const VEHICLE_ICONS = { sedan:'🚗', family:'🚙', minibus:'🚐' };
 let VEHICLES = {};
@@ -179,8 +190,49 @@ async function enterDashboard(){
   document.getElementById('dashboard').style.display = 'block';
   if (!Object.keys(VEHICLES).length) VEHICLES = await fetch(API_BASE + '/api/vehicles').then(r=>r.json());
   POINTS = await fetch(API_BASE + '/api/points').then(r=>r.json()).catch(()=>POINTS);
+  ensureFleetMap();
   refresh();
   setInterval(refresh, 4000);
+}
+
+/* ---------- live fleet map ---------- */
+let fleetMap = null;
+let captainMarkers = {}; // captainId -> Leaflet marker
+
+function ensureFleetMap(){
+  if (fleetMap || !POINTS.A.lat) return;
+  fleetMap = L.map('fleetMap', { zoomControl: true, attributionControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(fleetMap);
+  L.marker([POINTS.A.lat, POINTS.A.lng], { icon: L.divIcon({ className: 'point-pin', iconSize: [16,16] }) }).addTo(fleetMap).bindPopup(POINTS.A.full);
+  L.marker([POINTS.B.lat, POINTS.B.lng], { icon: L.divIcon({ className: 'point-pin', iconSize: [16,16] }) }).addTo(fleetMap).bindPopup(POINTS.B.full);
+  fleetMap.fitBounds(L.latLngBounds([[POINTS.A.lat, POINTS.A.lng], [POINTS.B.lat, POINTS.B.lng]]), { padding: [40, 40] });
+  setTimeout(() => fleetMap && fleetMap.invalidateSize(), 200);
+}
+
+function updateFleetMap(captains){
+  ensureFleetMap();
+  if (!fleetMap) return;
+  const seen = new Set();
+  captains.forEach(cap => {
+    if (!cap.location || cap.status !== 'online') return; // only show captains currently on duty
+    seen.add(cap.id);
+    const latlng = [cap.location.lat, cap.location.lng];
+    const popupText = `${cap.name} · ${VEHICLES[cap.vehicleType] ? VEHICLES[cap.vehicleType].name : cap.vehicleType} · ${cap.currentCarId ? 'on a car' : 'idle'}`;
+    if (captainMarkers[cap.id]){
+      captainMarkers[cap.id].setLatLng(latlng).setPopupContent(popupText);
+    } else {
+      captainMarkers[cap.id] = L.marker(latlng, { icon: L.divIcon({ className: 'captain-pin', html: '🚗', iconSize: [28,28] }) })
+        .addTo(fleetMap).bindPopup(popupText);
+    }
+  });
+  // remove markers for captains who went offline or stopped sharing location
+  Object.keys(captainMarkers).forEach(id => {
+    if (!seen.has(id)){ fleetMap.removeLayer(captainMarkers[id]); delete captainMarkers[id]; }
+  });
+  document.getElementById('fleetCount').textContent = seen.size;
 }
 
 async function refresh(){
@@ -201,6 +253,8 @@ function render(data){
   const cars = data.cars;
   const captains = data.captains;
   const now = data.now;
+
+  updateFleetMap(captains);
 
   const onlineCaptains = captains.filter(c=>c.status==='online').length;
   const idleCaptains = captains.filter(c=>c.status==='online' && !c.currentCarId).length;
