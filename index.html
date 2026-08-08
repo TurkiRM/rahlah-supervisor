@@ -123,18 +123,18 @@
 <script>
 const VEHICLE_ICONS = { sedan:'🚗', family:'🚙', minibus:'🚐' };
 let VEHICLES = {};
-  
 // ===== EDIT THIS BEFORE DEPLOYING AS ITS OWN STATIC SITE =====
 // Leave blank for local dev (falls back to http://localhost:3000) or if this
 // file is served by the same server as the API. If deployed separately, set
 // this to your backend's URL, e.g. 'https://rahlah-backend.onrender.com'.
-const CONFIGURED_API_BASE = 'https://rahlah-backend.onrender.com';
+const CONFIGURED_API_BASE = '';
 // ===============================================================
 let API_BASE = CONFIGURED_API_BASE || (location.hostname === 'localhost' ? 'http://localhost:3000' : '');
 let token = localStorage.getItem('rahlah_supervisor_token') || null;
 const STUCK_MS = 45 * 1000; // flag a forming, uncaptained car as "needs attention" past this age
 
-function fmtRoute(d){ return d==='A_TO_B' ? 'A → B' : 'B → A'; }
+let POINTS = { A: { full: 'Point A', short: 'A' }, B: { full: 'Point B', short: 'B' } }; // overwritten by /api/points on load
+function fmtRoute(d){ return d==='A_TO_B' ? `${POINTS.A.short} → ${POINTS.B.short}` : `${POINTS.B.short} → ${POINTS.A.short}`; }
 function fmtAge(ms){
   const s = Math.floor(ms/1000);
   if (s < 60) return s + 's';
@@ -178,6 +178,7 @@ async function enterDashboard(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   if (!Object.keys(VEHICLES).length) VEHICLES = await fetch(API_BASE + '/api/vehicles').then(r=>r.json());
+  POINTS = await fetch(API_BASE + '/api/points').then(r=>r.json()).catch(()=>POINTS);
   refresh();
   setInterval(refresh, 4000);
 }
@@ -282,4 +283,3 @@ if (token){ enterDashboard(); }
 </script>
 </body>
 </html>
-
