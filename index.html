@@ -147,7 +147,7 @@
   <table><thead><tr><th>Route / vehicle</th><th>Waiting</th></tr></thead><tbody id="pendingBody"></tbody></table>
 
   <div class="section-title">Recent completed trips <span class="count" id="tripsCount">0</span></div>
-  <table><thead><tr><th>Vehicle</th><th>Mode</th><th>Route</th><th>Seats</th><th>Fare</th><th>Completed</th></tr></thead><tbody id="tripsBody"></tbody></table>
+  <table><thead><tr><th>Vehicle</th><th>Mode</th><th>Route</th><th>Captain</th><th>Passengers</th><th>Fare</th><th>Completed</th></tr></thead><tbody id="tripsBody"></tbody></table>
 
   <div class="refresh-note">Auto-refreshing every 4 seconds.</div>
 </div>
@@ -360,15 +360,19 @@ function render(data){
 
   const trips = data.trips.slice(0, 20);
   document.getElementById('tripsCount').textContent = data.trips.length;
-  document.getElementById('tripsBody').innerHTML = trips.length ? trips.map(t => `
-    <tr>
+  document.getElementById('tripsBody').innerHTML = trips.length ? trips.map(t => {
+    const names = (t.passengers || []).map(p => p.name);
+    const passengerText = names.length > 2 ? `${names.slice(0,2).join(', ')} & ${names.length-2} more` : names.join(', ');
+    return `
+    <tr title="${(t.passengers||[]).map(p=>p.name+' · '+p.phone).join('\\n')}">
       <td>${VEHICLE_ICONS[t.vehicleType]} ${VEHICLES[t.vehicleType].name}</td>
       <td>${t.mode==='private' ? '<span class="badge private">Private</span>' : 'Shared'}</td>
       <td class="route-tag">${fmtRoute(t.direction)}</td>
-      <td>${t.seats}</td>
+      <td>${t.captainName || '—'} <span class="mono" style="color:var(--ink-soft);">${t.captainPlate||''}</span></td>
+      <td style="font-size:12px;">${passengerText || '—'}</td>
       <td class="mono">${t.fare} SAR</td>
       <td class="mono">${fmtTime(t.completedAt)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No completed trips yet.</td></tr>`;
+    </tr>`;}).join('') : `<tr class="empty-row"><td colspan="7">No completed trips yet.</td></tr>`;
 }
 
 /* ---------- account moderation ---------- */
