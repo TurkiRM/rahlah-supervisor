@@ -66,6 +66,22 @@
   .badge.private{background:var(--gold);color:var(--brand-deep);}
   .badge.online{background:#DCEEE1;color:#1B6B3A;}
   .badge.offline{background:#E7E4DA;color:#6B6555;}
+  .badge.active{background:#DCEEE1;color:#1B6B3A;}
+  .badge.pending_review{background:#EFE6C8;color:#7A5E12;}
+  .badge.documents_needed{background:#E7E4DA;color:#6B6555;}
+  .badge.rejected{background:#FBE7E2;color:#8A3420;}
+  .badge.suspended{background:var(--danger);color:#fff;}
+  .action-btn{background:none;border:1.5px solid var(--line);color:var(--brand-deep);border-radius:8px;padding:5px 10px;font-family:'Space Grotesk';font-weight:600;font-size:11px;cursor:pointer;white-space:nowrap;}
+  .action-btn.danger{border-color:var(--danger);color:var(--danger);}
+  .action-btn.go{border-color:var(--brand);color:var(--brand-deep);}
+  .approval-card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;}
+  .approval-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:10px;}
+  .approval-name{font-family:'Space Grotesk';font-weight:600;font-size:15px;}
+  .approval-meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .approval-docs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .approval-doc-link{font-size:11px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px;color:var(--brand-deep);text-decoration:none;font-family:'Space Grotesk';font-weight:600;}
+  .approval-doc-link.missing{color:var(--ink-soft);border-style:dashed;pointer-events:none;}
+  .approval-actions{display:flex;gap:10px;}
   .mono{font-family:'IBM Plex Mono';font-size:12px;}
   .mini-seats{display:flex;gap:3px;flex-wrap:wrap;max-width:160px;}
   .mini-seat{width:16px;height:16px;border-radius:4px;border:1.5px dashed #D3CBAF;background:#FBF8EE;}
@@ -111,6 +127,9 @@
     <th>Vehicle</th><th>Route</th><th>Seats</th><th>Status</th><th>Waiting</th>
   </tr></thead><tbody id="attnBody"></tbody></table>
 
+  <div class="section-title">Pending captain approvals <span class="count" id="pendingApprovalCount">0</span></div>
+  <div id="pendingApprovalList"></div>
+
   <div class="section-title">Live cars <span class="count" id="carsCount">0</span></div>
   <table><thead><tr>
     <th>Vehicle</th><th>Mode</th><th>Route</th><th>Seats</th><th>Status</th><th>Captain</th><th>Age</th>
@@ -118,8 +137,11 @@
 
   <div class="section-title">Captains <span class="count" id="captainsCount">0</span></div>
   <table><thead><tr>
-    <th>Name</th><th>Vehicle</th><th>Route</th><th>Status</th><th>Current car</th><th>Earnings today</th><th>Trips today</th>
+    <th>Name</th><th>Vehicle</th><th>Route</th><th>Duty</th><th>Account</th><th>Current car</th><th>Earnings today</th><th>Action</th>
   </tr></thead><tbody id="captainsBody"></tbody></table>
+
+  <div class="section-title">Customers <span class="count" id="customersCount">0</span></div>
+  <table><thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Account</th><th>Trips</th><th>Action</th></tr></thead><tbody id="customersBody"></tbody></table>
 
   <div class="section-title">Pending private bookings <span class="count" id="pendingCount">0</span></div>
   <table><thead><tr><th>Route / vehicle</th><th>Waiting</th></tr></thead><tbody id="pendingBody"></tbody></table>
@@ -252,6 +274,7 @@ async function refresh(){
 function render(data){
   const cars = data.cars;
   const captains = data.captains;
+  const customers = data.customers;
   const now = data.now;
 
   updateFleetMap(captains);
@@ -262,15 +285,18 @@ function render(data){
   const attn = cars.filter(c => c.mode==='shared' && c.status==='forming' && !c.captainId && seatsFilled(c)>0 && (now-c.createdAt)>STUCK_MS);
   const todayTrips = data.trips.length;
   const todayRevenue = data.trips.reduce((s,t)=>s+t.fare,0);
+  const pendingApproval = captains.filter(c=>c.accountStatus==='pending_review');
 
   document.getElementById('statGrid').innerHTML = `
     <div class="stat-card"><div class="stat-label">Captains online</div><div class="stat-value">${onlineCaptains}</div></div>
     <div class="stat-card"><div class="stat-label">Idle right now</div><div class="stat-value">${idleCaptains}</div></div>
     <div class="stat-card"><div class="stat-label">Active cars</div><div class="stat-value">${activeCars}</div></div>
     <div class="stat-card"><div class="stat-label">Needs attention</div><div class="stat-value ${attn.length?'alert':''}">${attn.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Trips today</div><div class="stat-value">${todayTrips}</div></div>
+    <div class="stat-card"><div class="stat-label">Awaiting approval</div><div class="stat-value ${pendingApproval.length?'alert':''}">${pendingApproval.length}</div></div>
     <div class="stat-card"><div class="stat-label">Revenue today</div><div class="stat-value">${todayRevenue} SAR</div></div>
   `;
+
+  renderPendingApprovals(pendingApproval);
 
   document.getElementById('attnCount').textContent = attn.length;
   document.getElementById('attnBody').innerHTML = attn.length ? attn.map(c => `
@@ -300,13 +326,25 @@ function render(data){
   document.getElementById('captainsBody').innerHTML = sortedCaptains.length ? sortedCaptains.map(cap => `
     <tr>
       <td>${cap.name} <span class="mono" style="color:var(--ink-soft);">${cap.plate}</span></td>
-      <td>${VEHICLE_ICONS[cap.vehicleType]} ${VEHICLES[cap.vehicleType].name}</td>
-      <td class="route-tag">${fmtRoute(cap.direction)}</td>
+      <td>${cap.vehicleType ? VEHICLE_ICONS[cap.vehicleType] + ' ' + VEHICLES[cap.vehicleType].name : '—'}</td>
+      <td class="route-tag">${cap.direction ? fmtRoute(cap.direction) : '—'}</td>
       <td><span class="badge ${cap.status}">${cap.status}</span></td>
+      <td><span class="badge ${cap.accountStatus}">${cap.accountStatus.replace('_',' ')}</span></td>
       <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
       <td class="mono">${cap.earnings} SAR</td>
-      <td class="mono">${cap.tripHistory.length}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">No captains have gone online yet.</td></tr>`;
+      <td>${captainActionButton(cap)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="8">No captains have registered yet.</td></tr>`;
+
+  document.getElementById('customersCount').textContent = customers.length;
+  document.getElementById('customersBody').innerHTML = customers.length ? customers.map(cust => `
+    <tr>
+      <td>${cust.name}</td>
+      <td class="mono">${cust.phone}</td>
+      <td>${cust.gender==='men'?'♂ Man':'♀ Woman'}</td>
+      <td><span class="badge ${cust.accountStatus}">${cust.accountStatus}</span></td>
+      <td class="mono">${cust.tripHistory.length}</td>
+      <td>${customerActionButton(cust)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No customers have registered yet.</td></tr>`;
 
   const pendingRows = [];
   Object.entries(data.pendingPrivate||{}).forEach(([k, list])=>{
@@ -333,8 +371,85 @@ function render(data){
     </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No completed trips yet.</td></tr>`;
 }
 
+/* ---------- account moderation ---------- */
+
+function captainActionButton(cap){
+  if (cap.accountStatus === 'active') return `<button class="action-btn danger" onclick="suspendCaptain('${cap.id}')">Suspend</button>`;
+  if (cap.accountStatus === 'suspended') return `<button class="action-btn go" onclick="reactivateCaptain('${cap.id}')">Reactivate</button>`;
+  return `<span style="color:var(--ink-soft);font-size:11px;">—</span>`;
+}
+function customerActionButton(cust){
+  if (cust.accountStatus === 'active') return `<button class="action-btn danger" onclick="suspendCustomer('${cust.id}')">Suspend</button>`;
+  return `<button class="action-btn go" onclick="reactivateCustomer('${cust.id}')">Reactivate</button>`;
+}
+async function postAction(path){
+  try{
+    const res = await fetch(API_BASE + path, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Action failed.'); return; }
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+function suspendCaptain(id){ if (confirm('Suspend this captain? They will be taken offline immediately.')) postAction(`/api/supervisor/captain/${id}/suspend`); }
+function reactivateCaptain(id){ postAction(`/api/supervisor/captain/${id}/reactivate`); }
+function suspendCustomer(id){ if (confirm('Suspend this customer? They will not be able to book.')) postAction(`/api/supervisor/customer/${id}/suspend`); }
+function reactivateCustomer(id){ postAction(`/api/supervisor/customer/${id}/reactivate`); }
+
+async function approveCaptain(id){
+  await postAction(`/api/supervisor/captain/${id}/approve`);
+}
+async function rejectCaptain(id){
+  const reason = prompt('Reason for rejecting this captain (shown to them):', 'Documents did not meet requirements.');
+  if (reason === null) return; // cancelled
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/captain/${id}/reject`, {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Action failed.'); return; }
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+
+const DOC_TYPES = [
+  { key:'license', label:'License' },
+  { key:'vehicleRegistration', label:'Registration' },
+  { key:'insurance', label:'Insurance' },
+  { key:'inspection', label:'Inspection' },
+  { key:'photo', label:'Photo' },
+];
+function renderPendingApprovals(list){
+  document.getElementById('pendingApprovalCount').textContent = list.length;
+  const wrap = document.getElementById('pendingApprovalList');
+  if (!list.length){
+    wrap.innerHTML = `<p style="font-size:13px;color:var(--ink-soft);">No captains waiting on review right now.</p>`;
+    return;
+  }
+  wrap.innerHTML = list.map(cap => `
+    <div class="approval-card">
+      <div class="approval-top">
+        <div>
+          <div class="approval-name">${cap.name}</div>
+          <div class="approval-meta">${cap.phone} · Plate ${cap.plate}</div>
+        </div>
+      </div>
+      <div class="approval-docs">
+        ${DOC_TYPES.map(d => {
+          const has = cap.documents && cap.documents[d.key];
+          const url = has ? `${API_BASE}/api/supervisor/document/${cap.id}/${d.key}?token=${encodeURIComponent(token)}` : '#';
+          return `<a class="approval-doc-link ${has?'':'missing'}" href="${url}" target="_blank" rel="noopener">${d.label} ${has?'↗':'(missing)'}</a>`;
+        }).join('')}
+      </div>
+      <div class="approval-actions">
+        <button class="cta gold" style="margin:0;flex:1;" onclick="approveCaptain('${cap.id}')">Approve</button>
+        <button class="cta ghost" style="margin:0;flex:1;" onclick="rejectCaptain('${cap.id}')">Reject</button>
+      </div>
+    </div>
+  `).join('');
+}
+
 if (token){ enterDashboard(); }
 </script>
 </body>
 </html>
-
