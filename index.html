@@ -170,7 +170,12 @@ let token = localStorage.getItem('rahlah_supervisor_token') || null;
 const STUCK_MS = 45 * 1000; // flag a forming, uncaptained car as "needs attention" past this age
 
 let POINTS = { A: { full: 'Point A', short: 'A' }, B: { full: 'Point B', short: 'B' } }; // overwritten by /api/points on load
-function fmtRoute(d){ return d==='A_TO_B' ? `${POINTS.A.short} → ${POINTS.B.short}` : `${POINTS.B.short} → ${POINTS.A.short}`; }
+let DIRECTIONS = { A_TO_B: {from:'A',to:'B'}, B_TO_A: {from:'B',to:'A'} }; // overwritten by /api/directions on load
+function fmtRoute(d){
+  const dir = DIRECTIONS[d];
+  if (!dir) return d;
+  return `${POINTS[dir.from].short} → ${POINTS[dir.to].short}`;
+}
 function fmtAge(ms){
   const s = Math.floor(ms/1000);
   if (s < 60) return s + 's';
@@ -215,6 +220,7 @@ async function enterDashboard(){
   document.getElementById('dashboard').style.display = 'block';
   if (!Object.keys(VEHICLES).length) VEHICLES = await fetch(API_BASE + '/api/vehicles').then(r=>r.json());
   POINTS = await fetch(API_BASE + '/api/points').then(r=>r.json()).catch(()=>POINTS);
+  DIRECTIONS = await fetch(API_BASE + '/api/directions').then(r=>r.json()).catch(()=>DIRECTIONS);
   ensureFleetMap();
   refresh();
   setInterval(refresh, 4000);
@@ -225,15 +231,20 @@ let fleetMap = null;
 let captainMarkers = {}; // captainId -> Leaflet marker
 
 function ensureFleetMap(){
-  if (fleetMap || !POINTS.A.lat) return;
+  const ids = Object.keys(POINTS);
+  if (fleetMap || !ids.length || !POINTS[ids[0]].lat) return;
   fleetMap = L.map('fleetMap', { zoomControl: true, attributionControl: true });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
   }).addTo(fleetMap);
-  L.marker([POINTS.A.lat, POINTS.A.lng], { icon: L.divIcon({ className: 'point-pin', iconSize: [16,16] }) }).addTo(fleetMap).bindPopup(POINTS.A.full);
-  L.marker([POINTS.B.lat, POINTS.B.lng], { icon: L.divIcon({ className: 'point-pin', iconSize: [16,16] }) }).addTo(fleetMap).bindPopup(POINTS.B.full);
-  fleetMap.fitBounds(L.latLngBounds([[POINTS.A.lat, POINTS.A.lng], [POINTS.B.lat, POINTS.B.lng]]), { padding: [40, 40] });
+  const bounds = [];
+  ids.forEach(id => {
+    const pt = POINTS[id];
+    L.marker([pt.lat, pt.lng], { icon: L.divIcon({ className: 'point-pin', iconSize: [16,16] }) }).addTo(fleetMap).bindPopup(pt.full);
+    bounds.push([pt.lat, pt.lng]);
+  });
+  fleetMap.fitBounds(L.latLngBounds(bounds), { padding: [40, 40] });
   setTimeout(() => fleetMap && fleetMap.invalidateSize(), 200);
 }
 
