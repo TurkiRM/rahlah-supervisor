@@ -48,6 +48,7 @@
   .stat-value.alert{color:var(--danger);}
 
   .section-title{font-family:'Space Grotesk';font-weight:600;font-size:16px;margin:30px 0 12px;color:var(--brand-deep);display:flex;align-items:center;gap:8px;}
+  .search-box{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;margin-bottom:10px;background:var(--panel);}
   .section-title .count{font-family:'IBM Plex Mono';font-size:12px;font-weight:500;color:var(--ink-soft);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
 
   table{width:100%;border-collapse:collapse;background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);overflow:hidden;}
@@ -136,11 +137,13 @@
   </tr></thead><tbody id="carsBody"></tbody></table>
 
   <div class="section-title">Captains <span class="count" id="captainsCount">0</span></div>
+  <input type="text" class="search-box" id="captainSearch" placeholder="Search by name or phone…" oninput="renderCaptainsTable()" />
   <table><thead><tr>
     <th>Name</th><th>Vehicle</th><th>Route</th><th>Duty</th><th>Account</th><th>Current car</th><th>Earnings today</th><th>Action</th>
   </tr></thead><tbody id="captainsBody"></tbody></table>
 
   <div class="section-title">Customers <span class="count" id="customersCount">0</span></div>
+  <input type="text" class="search-box" id="customerSearch" placeholder="Search by name or phone…" oninput="renderCustomersTable()" />
   <table><thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Account</th><th>Trips</th><th>Action</th></tr></thead><tbody id="customersBody"></tbody></table>
 
   <div class="section-title">Pending private bookings <span class="count" id="pendingCount">0</span></div>
@@ -271,6 +274,45 @@ async function refresh(){
   }
 }
 
+let allCaptains = [];
+let allCustomers = [];
+
+function matchesSearch(record, query){
+  if (!query) return true;
+  const q = query.trim().toLowerCase();
+  return (record.name||'').toLowerCase().includes(q) || (record.phone||'').replace(/\s/g,'').includes(q.replace(/\s/g,''));
+}
+
+function renderCaptainsTable(){
+  const query = document.getElementById('captainSearch').value;
+  const list = allCaptains.filter(cap => matchesSearch(cap, query));
+  document.getElementById('captainsBody').innerHTML = list.length ? list.map(cap => `
+    <tr>
+      <td>${cap.name} <span class="mono" style="color:var(--ink-soft);">${cap.plate}</span></td>
+      <td>${cap.vehicleType ? VEHICLE_ICONS[cap.vehicleType] + ' ' + VEHICLES[cap.vehicleType].name : '—'}</td>
+      <td class="route-tag">${cap.direction ? fmtRoute(cap.direction) : '—'}</td>
+      <td><span class="badge ${cap.status}">${cap.status}</span></td>
+      <td><span class="badge ${cap.accountStatus||'active'}">${(cap.accountStatus||'active').replace('_',' ')}</span></td>
+      <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
+      <td class="mono">${cap.earnings} SAR</td>
+      <td>${captainActionButton(cap)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="8">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
+}
+
+function renderCustomersTable(){
+  const query = document.getElementById('customerSearch').value;
+  const list = allCustomers.filter(cust => matchesSearch(cust, query));
+  document.getElementById('customersBody').innerHTML = list.length ? list.map(cust => `
+    <tr>
+      <td>${cust.name}</td>
+      <td class="mono">${cust.phone}</td>
+      <td>${cust.gender==='men'?'♂ Man':'♀ Woman'}</td>
+      <td><span class="badge ${cust.accountStatus||'active'}">${cust.accountStatus||'active'}</span></td>
+      <td class="mono">${cust.tripHistory.length}</td>
+      <td>${customerActionButton(cust)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">${query ? 'No customers match "'+query+'".' : 'No customers have registered yet.'}</td></tr>`;
+}
+
 function render(data){
   const cars = data.cars;
   const captains = data.captains;
@@ -323,28 +365,12 @@ function render(data){
 
   const sortedCaptains = [...captains].sort((a,b)=> (b.status==='online')-(a.status==='online'));
   document.getElementById('captainsCount').textContent = captains.length;
-  document.getElementById('captainsBody').innerHTML = sortedCaptains.length ? sortedCaptains.map(cap => `
-    <tr>
-      <td>${cap.name} <span class="mono" style="color:var(--ink-soft);">${cap.plate}</span></td>
-      <td>${cap.vehicleType ? VEHICLE_ICONS[cap.vehicleType] + ' ' + VEHICLES[cap.vehicleType].name : '—'}</td>
-      <td class="route-tag">${cap.direction ? fmtRoute(cap.direction) : '—'}</td>
-      <td><span class="badge ${cap.status}">${cap.status}</span></td>
-      <td><span class="badge ${cap.accountStatus||'active'}">${(cap.accountStatus||'active').replace('_',' ')}</span></td>
-      <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
-      <td class="mono">${cap.earnings} SAR</td>
-      <td>${captainActionButton(cap)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="8">No captains have registered yet.</td></tr>`;
+  allCaptains = sortedCaptains;
+  renderCaptainsTable();
 
+  allCustomers = [...customers].sort((a,b)=> b.createdAt - a.createdAt); // newest first — easiest to find who just signed up
   document.getElementById('customersCount').textContent = customers.length;
-  document.getElementById('customersBody').innerHTML = customers.length ? customers.map(cust => `
-    <tr>
-      <td>${cust.name}</td>
-      <td class="mono">${cust.phone}</td>
-      <td>${cust.gender==='men'?'♂ Man':'♀ Woman'}</td>
-      <td><span class="badge ${cust.accountStatus||'active'}">${cust.accountStatus||'active'}</span></td>
-      <td class="mono">${cust.tripHistory.length}</td>
-      <td>${customerActionButton(cust)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No customers have registered yet.</td></tr>`;
+  renderCustomersTable();
 
   const pendingRows = [];
   Object.entries(data.pendingPrivate||{}).forEach(([k, list])=>{
