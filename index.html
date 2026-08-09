@@ -108,7 +108,7 @@
 
 <div class="wrap" id="dashboard" style="display:none;">
   <header class="top">
-    <div class="brand">Rahlah <small>Supervisor · read-only</small></div>
+    <div class="brand">Rahlah <small>Supervisor</small></div>
     <div class="top-right">
       <div class="conn"><span class="dot" id="connDot"></span><span id="connText">Connecting…</span></div>
       <button class="logout-btn" onclick="logout()">Log out</button>
@@ -329,7 +329,7 @@ function render(data){
       <td>${cap.vehicleType ? VEHICLE_ICONS[cap.vehicleType] + ' ' + VEHICLES[cap.vehicleType].name : '—'}</td>
       <td class="route-tag">${cap.direction ? fmtRoute(cap.direction) : '—'}</td>
       <td><span class="badge ${cap.status}">${cap.status}</span></td>
-      <td><span class="badge ${cap.accountStatus}">${cap.accountStatus.replace('_',' ')}</span></td>
+      <td><span class="badge ${cap.accountStatus||'active'}">${(cap.accountStatus||'active').replace('_',' ')}</span></td>
       <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
       <td class="mono">${cap.earnings} SAR</td>
       <td>${captainActionButton(cap)}</td>
@@ -341,7 +341,7 @@ function render(data){
       <td>${cust.name}</td>
       <td class="mono">${cust.phone}</td>
       <td>${cust.gender==='men'?'♂ Man':'♀ Woman'}</td>
-      <td><span class="badge ${cust.accountStatus}">${cust.accountStatus}</span></td>
+      <td><span class="badge ${cust.accountStatus||'active'}">${cust.accountStatus||'active'}</span></td>
       <td class="mono">${cust.tripHistory.length}</td>
       <td>${customerActionButton(cust)}</td>
     </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No customers have registered yet.</td></tr>`;
