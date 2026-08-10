@@ -131,7 +131,7 @@
 
   <div class="section-title">Needs attention <span class="count" id="attnCount">0</span></div>
   <table><thead><tr>
-    <th>Vehicle</th><th>Route</th><th>Seats</th><th>Status</th><th>Waiting</th>
+    <th>Vehicle</th><th>Route</th><th>Seats</th><th>Status</th><th>Waiting</th><th>Action</th>
   </tr></thead><tbody id="attnBody"></tbody></table>
 
   <div class="section-title">Pending captain approvals <span class="count" id="pendingApprovalCount">0</span></div>
@@ -362,14 +362,24 @@ function render(data){
   renderPendingApprovals(pendingApproval);
 
   document.getElementById('attnCount').textContent = attn.length;
-  document.getElementById('attnBody').innerHTML = attn.length ? attn.map(c => `
+  document.getElementById('attnBody').innerHTML = attn.length ? attn.map(c => {
+    const idleMatches = captains.filter(cap => cap.status==='online' && !cap.currentCarId && cap.vehicleType===c.vehicleType);
+    const assignControl = idleMatches.length
+      ? `<select id="assign-${c.id}" style="font-size:11px;padding:5px 6px;border-radius:6px;border:1px solid var(--line);margin-right:6px;">
+           ${idleMatches.map(cap => `<option value="${cap.id}">${cap.name}${cap.currentPoint && POINTS[cap.currentPoint] ? ' · at '+POINTS[cap.currentPoint].short : ''}</option>`).join('')}
+         </select>
+         <button class="action-btn go" onclick="assignCaptainToCar('${c.id}')">Assign</button>`
+      : `<span style="color:var(--ink-soft);font-size:11px;">No idle captains</span>`;
+    return `
     <tr class="attn">
       <td>${VEHICLE_ICONS[c.vehicleType]} ${VEHICLES[c.vehicleType].name}</td>
       <td class="route-tag">${fmtRoute(c.direction)}</td>
       <td>${miniSeats(c)}</td>
       <td><span class="badge attn">No captain</span></td>
       <td class="mono">${fmtAge(now-c.createdAt)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="5">Nothing stuck — all clear.</td></tr>`;
+      <td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${assignControl}<button class="action-btn danger" onclick="cancelStuckCar('${c.id}')">Cancel</button></div></td>
+    </tr>`;
+  }).join('') : `<tr class="empty-row"><td colspan="6">Nothing stuck — all clear.</td></tr>`;
 
   const sortedCars = [...cars].filter(c=>c.status!=='completed').sort((a,b)=>b.createdAt-a.createdAt);
   document.getElementById('carsCount').textContent = sortedCars.length;
@@ -442,6 +452,23 @@ async function postAction(path){
 }
 function suspendCaptain(id){ if (confirm('Suspend this captain? They will be taken offline immediately, across every vehicle on their account.')) postAction(`/api/supervisor/captain/${id}/suspend`); }
 function reactivateCaptain(id){ postAction(`/api/supervisor/captain/${id}/reactivate`); }
+
+async function assignCaptainToCar(carId){
+  const sel = document.getElementById('assign-'+carId);
+  if (!sel || !sel.value) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/car/${carId}/assign-captain`, {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ captainId: sel.value }),
+    });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not assign a captain.'); return; }
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+function cancelStuckCar(carId){
+  if (confirm('Cancel this booking? Waiting passengers will be released and need to book again.')) postAction(`/api/supervisor/car/${carId}/cancel`);
+}
 function suspendCustomer(id){ if (confirm('Suspend this customer? They will not be able to book.')) postAction(`/api/supervisor/customer/${id}/suspend`); }
 function reactivateCustomer(id){ postAction(`/api/supervisor/customer/${id}/reactivate`); }
 
