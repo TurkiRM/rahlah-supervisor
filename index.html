@@ -72,6 +72,12 @@
   .badge.documents_needed{background:#E7E4DA;color:#6B6555;}
   .badge.rejected{background:#FBE7E2;color:#8A3420;}
   .badge.suspended{background:var(--danger);color:#fff;}
+  .vehicle-chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;padding:2px 7px;border-radius:12px;margin:1px 3px 1px 0;font-family:'Space Grotesk';font-weight:600;white-space:nowrap;}
+  .vehicle-chip.active{background:#DCEEE1;color:#1B6B3A;}
+  .vehicle-chip.pending_review{background:#EFE6C8;color:#7A5E12;}
+  .vehicle-chip.documents_needed{background:#E7E4DA;color:#6B6555;}
+  .vehicle-chip.rejected{background:#FBE7E2;color:#8A3420;}
+  .suspended-tag{background:var(--danger);color:#fff;font-size:9.5px;font-weight:600;font-family:'Space Grotesk';padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;}
   .action-btn{background:none;border:1.5px solid var(--line);color:var(--brand-deep);border-radius:8px;padding:5px 10px;font-family:'Space Grotesk';font-weight:600;font-size:11px;cursor:pointer;white-space:nowrap;}
   .action-btn.danger{border-color:var(--danger);color:var(--danger);}
   .action-btn.go{border-color:var(--brand);color:var(--brand-deep);}
@@ -139,7 +145,7 @@
   <div class="section-title">Captains <span class="count" id="captainsCount">0</span></div>
   <input type="text" class="search-box" id="captainSearch" placeholder="Search by name or phone…" oninput="renderCaptainsTable()" />
   <table><thead><tr>
-    <th>Name</th><th>Vehicle</th><th>Route</th><th>Duty</th><th>Account</th><th>Current car</th><th>Earnings today</th><th>Action</th>
+    <th>Name</th><th>Vehicles</th><th>At point</th><th>Duty</th><th>Current car</th><th>Earnings today</th><th>Action</th>
   </tr></thead><tbody id="captainsBody"></tbody></table>
 
   <div class="section-title">Customers <span class="count" id="customersCount">0</span></div>
@@ -297,17 +303,21 @@ function matchesSearch(record, query){
 function renderCaptainsTable(){
   const query = document.getElementById('captainSearch').value;
   const list = allCaptains.filter(cap => matchesSearch(cap, query));
-  document.getElementById('captainsBody').innerHTML = list.length ? list.map(cap => `
+  document.getElementById('captainsBody').innerHTML = list.length ? list.map(cap => {
+    const vehicleChips = Object.entries(cap.vehicles || {}).map(([vtype, v]) =>
+      `<span class="vehicle-chip ${v.accountStatus}">${VEHICLE_ICONS[vtype]||''} ${VEHICLES[vtype] ? VEHICLES[vtype].name : vtype}</span>`
+    ).join('') || '<span style="color:var(--ink-soft);font-size:11px;">none</span>';
+    return `
     <tr>
-      <td>${cap.name} <span class="mono" style="color:var(--ink-soft);">${cap.plate}</span></td>
-      <td>${cap.vehicleType ? VEHICLE_ICONS[cap.vehicleType] + ' ' + VEHICLES[cap.vehicleType].name : '—'}</td>
-      <td class="route-tag">${cap.direction ? fmtRoute(cap.direction) : '—'}</td>
+      <td>${cap.name}${cap.suspended ? '<span class="suspended-tag">Suspended</span>' : ''}</td>
+      <td>${vehicleChips}</td>
+      <td class="route-tag">${cap.currentPoint && POINTS[cap.currentPoint] ? POINTS[cap.currentPoint].short : '—'}</td>
       <td><span class="badge ${cap.status}">${cap.status}</span></td>
-      <td><span class="badge ${cap.accountStatus||'active'}">${(cap.accountStatus||'active').replace('_',' ')}</span></td>
       <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
       <td class="mono">${cap.earnings} SAR</td>
       <td>${captainActionButton(cap)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="8">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr class="empty-row"><td colspan="7">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
 }
 
 function renderCustomersTable(){
@@ -338,7 +348,7 @@ function render(data){
   const attn = cars.filter(c => c.mode==='shared' && c.status==='forming' && !c.captainId && seatsFilled(c)>0 && (now-c.createdAt)>STUCK_MS);
   const todayTrips = data.trips.length;
   const todayRevenue = data.trips.reduce((s,t)=>s+t.fare,0);
-  const pendingApproval = captains.filter(c=>c.accountStatus==='pending_review');
+  const pendingApproval = pendingVehiclePairs(captains);
 
   document.getElementById('statGrid').innerHTML = `
     <div class="stat-card"><div class="stat-label">Captains online</div><div class="stat-value">${onlineCaptains}</div></div>
@@ -415,9 +425,8 @@ function render(data){
 /* ---------- account moderation ---------- */
 
 function captainActionButton(cap){
-  if (cap.accountStatus === 'active') return `<button class="action-btn danger" onclick="suspendCaptain('${cap.id}')">Suspend</button>`;
-  if (cap.accountStatus === 'suspended') return `<button class="action-btn go" onclick="reactivateCaptain('${cap.id}')">Reactivate</button>`;
-  return `<span style="color:var(--ink-soft);font-size:11px;">—</span>`;
+  if (cap.suspended) return `<button class="action-btn go" onclick="reactivateCaptain('${cap.id}')">Reactivate</button>`;
+  return `<button class="action-btn danger" onclick="suspendCaptain('${cap.id}')">Suspend</button>`;
 }
 function customerActionButton(cust){
   if (cust.accountStatus === 'active') return `<button class="action-btn danger" onclick="suspendCustomer('${cust.id}')">Suspend</button>`;
@@ -431,19 +440,19 @@ async function postAction(path){
     refresh();
   } catch(e){ alert("Couldn't reach the server."); }
 }
-function suspendCaptain(id){ if (confirm('Suspend this captain? They will be taken offline immediately.')) postAction(`/api/supervisor/captain/${id}/suspend`); }
+function suspendCaptain(id){ if (confirm('Suspend this captain? They will be taken offline immediately, across every vehicle on their account.')) postAction(`/api/supervisor/captain/${id}/suspend`); }
 function reactivateCaptain(id){ postAction(`/api/supervisor/captain/${id}/reactivate`); }
 function suspendCustomer(id){ if (confirm('Suspend this customer? They will not be able to book.')) postAction(`/api/supervisor/customer/${id}/suspend`); }
 function reactivateCustomer(id){ postAction(`/api/supervisor/customer/${id}/reactivate`); }
 
-async function approveCaptain(id){
-  await postAction(`/api/supervisor/captain/${id}/approve`);
+async function approveVehicle(captainId, vehicleType){
+  await postAction(`/api/supervisor/captain/${captainId}/vehicle/${vehicleType}/approve`);
 }
-async function rejectCaptain(id){
-  const reason = prompt('Reason for rejecting this captain (shown to them):', 'Documents did not meet requirements.');
+async function rejectVehicle(captainId, vehicleType){
+  const reason = prompt('Reason for rejecting this vehicle (shown to the captain):', 'Documents did not meet requirements.');
   if (reason === null) return; // cancelled
   try{
-    const res = await fetch(`${API_BASE}/api/supervisor/captain/${id}/reject`, {
+    const res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/vehicle/${vehicleType}/reject`, {
       method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
       body: JSON.stringify({ reason }),
     });
@@ -453,38 +462,53 @@ async function rejectCaptain(id){
   } catch(e){ alert("Couldn't reach the server."); }
 }
 
-const DOC_TYPES = [
-  { key:'license', label:'License' },
+const VEHICLE_DOC_TYPES = [
   { key:'vehicleRegistration', label:'Registration' },
   { key:'insurance', label:'Insurance' },
   { key:'inspection', label:'Inspection' },
+];
+const PERSONAL_DOC_TYPES = [
+  { key:'license', label:'License' },
   { key:'photo', label:'Photo' },
 ];
-function renderPendingApprovals(list){
-  document.getElementById('pendingApprovalCount').textContent = list.length;
+function docLink(captainId, scope, docType, has, label){
+  const url = has ? `${API_BASE}/api/supervisor/document/${captainId}/${scope}/${docType}?token=${encodeURIComponent(token)}` : '#';
+  return `<a class="approval-doc-link ${has?'':'missing'}" href="${url}" target="_blank" rel="noopener">${label} ${has?'↗':'(missing)'}</a>`;
+}
+// Flattens every (captain, vehicle) pair currently awaiting review — a
+// captain can have more than one vehicle pending at once, each reviewed
+// separately.
+function pendingVehiclePairs(captains){
+  const pairs = [];
+  captains.forEach(cap => {
+    Object.entries(cap.vehicles || {}).forEach(([vtype, v]) => {
+      if (v.accountStatus === 'pending_review') pairs.push({ cap, vtype, v });
+    });
+  });
+  return pairs;
+}
+function renderPendingApprovals(pairs){
+  document.getElementById('pendingApprovalCount').textContent = pairs.length;
   const wrap = document.getElementById('pendingApprovalList');
-  if (!list.length){
-    wrap.innerHTML = `<p style="font-size:13px;color:var(--ink-soft);">No captains waiting on review right now.</p>`;
+  if (!pairs.length){
+    wrap.innerHTML = `<p style="font-size:13px;color:var(--ink-soft);">No vehicles waiting on review right now.</p>`;
     return;
   }
-  wrap.innerHTML = list.map(cap => `
+  wrap.innerHTML = pairs.map(({cap, vtype, v}) => `
     <div class="approval-card">
       <div class="approval-top">
         <div>
-          <div class="approval-name">${cap.name}</div>
-          <div class="approval-meta">${cap.phone} · Plate ${cap.plate}</div>
+          <div class="approval-name">${cap.name} <span class="mono" style="font-size:12px;color:var(--ink-soft);">${VEHICLES[vtype] ? VEHICLES[vtype].name : vtype}</span></div>
+          <div class="approval-meta">${cap.phone} · Plate ${v.plate}</div>
         </div>
       </div>
       <div class="approval-docs">
-        ${DOC_TYPES.map(d => {
-          const has = cap.documents && cap.documents[d.key];
-          const url = has ? `${API_BASE}/api/supervisor/document/${cap.id}/${d.key}?token=${encodeURIComponent(token)}` : '#';
-          return `<a class="approval-doc-link ${has?'':'missing'}" href="${url}" target="_blank" rel="noopener">${d.label} ${has?'↗':'(missing)'}</a>`;
-        }).join('')}
+        ${VEHICLE_DOC_TYPES.map(d => docLink(cap.id, vtype, d.key, v.documents && v.documents[d.key], d.label)).join('')}
+        ${PERSONAL_DOC_TYPES.map(d => docLink(cap.id, 'personal', d.key, cap.personalDocuments && cap.personalDocuments[d.key], d.label)).join('')}
       </div>
       <div class="approval-actions">
-        <button class="cta gold" style="margin:0;flex:1;" onclick="approveCaptain('${cap.id}')">Approve</button>
-        <button class="cta ghost" style="margin:0;flex:1;" onclick="rejectCaptain('${cap.id}')">Reject</button>
+        <button class="cta gold" style="margin:0;flex:1;" onclick="approveVehicle('${cap.id}','${vtype}')">Approve</button>
+        <button class="cta ghost" style="margin:0;flex:1;" onclick="rejectVehicle('${cap.id}','${vtype}')">Reject</button>
       </div>
     </div>
   `).join('');
