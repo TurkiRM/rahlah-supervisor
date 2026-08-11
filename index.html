@@ -435,12 +435,34 @@ function render(data){
 /* ---------- account moderation ---------- */
 
 function captainActionButton(cap){
-  if (cap.suspended) return `<button class="action-btn go" onclick="reactivateCaptain('${cap.id}')">Reactivate</button>`;
-  return `<button class="action-btn danger" onclick="suspendCaptain('${cap.id}')">Suspend</button>`;
+  const suspendBtn = cap.suspended
+    ? `<button class="action-btn go" onclick="reactivateCaptain('${cap.id}')">Reactivate</button>`
+    : `<button class="action-btn danger" onclick="suspendCaptain('${cap.id}')">Suspend</button>`;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;">${suspendBtn}<button class="action-btn" onclick="resetCaptainPassword('${cap.id}')">Reset password</button></div>`;
 }
 function customerActionButton(cust){
-  if (cust.accountStatus === 'active') return `<button class="action-btn danger" onclick="suspendCustomer('${cust.id}')">Suspend</button>`;
-  return `<button class="action-btn go" onclick="reactivateCustomer('${cust.id}')">Reactivate</button>`;
+  const suspendBtn = cust.accountStatus === 'active'
+    ? `<button class="action-btn danger" onclick="suspendCustomer('${cust.id}')">Suspend</button>`
+    : `<button class="action-btn go" onclick="reactivateCustomer('${cust.id}')">Reactivate</button>`;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;">${suspendBtn}<button class="action-btn" onclick="resetCustomerPassword('${cust.id}')">Reset password</button></div>`;
+}
+async function resetCaptainPassword(id){
+  if (!confirm("Reset this captain's password? A new temporary password will be generated — you'll need to relay it to them directly.")) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/captain/${id}/reset-password`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not reset password.'); return; }
+    alert(`New temporary password: ${data.tempPassword}\n\nShare this with the captain directly (phone call, in person). They should change it once logged in.`);
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+async function resetCustomerPassword(id){
+  if (!confirm("Reset this customer's password? A new temporary password will be generated — you'll need to relay it to them directly.")) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/customer/${id}/reset-password`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not reset password.'); return; }
+    alert(`New temporary password: ${data.tempPassword}\n\nShare this with the customer directly (phone call, in person). They should change it once logged in.`);
+  } catch(e){ alert("Couldn't reach the server."); }
 }
 async function postAction(path){
   try{
