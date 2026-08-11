@@ -145,12 +145,12 @@
   <div class="section-title">Captains <span class="count" id="captainsCount">0</span></div>
   <input type="text" class="search-box" id="captainSearch" placeholder="Search by name or phone…" oninput="renderCaptainsTable()" />
   <table><thead><tr>
-    <th>Name</th><th>Vehicles</th><th>At point</th><th>Duty</th><th>Current car</th><th>Earnings today</th><th>Action</th>
+    <th>Name</th><th>Vehicles</th><th>At point</th><th>Duty</th><th>Rating</th><th>Current car</th><th>Earnings today</th><th>Action</th>
   </tr></thead><tbody id="captainsBody"></tbody></table>
 
   <div class="section-title">Customers <span class="count" id="customersCount">0</span></div>
   <input type="text" class="search-box" id="customerSearch" placeholder="Search by name or phone…" oninput="renderCustomersTable()" />
-  <table><thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Account</th><th>Trips</th><th>Action</th></tr></thead><tbody id="customersBody"></tbody></table>
+  <table><thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Account</th><th>Rating</th><th>Trips</th><th>Action</th></tr></thead><tbody id="customersBody"></tbody></table>
 
   <div class="section-title">Pending private bookings <span class="count" id="pendingCount">0</span></div>
   <table><thead><tr><th>Route / vehicle</th><th>Waiting</th></tr></thead><tbody id="pendingBody"></tbody></table>
@@ -300,6 +300,12 @@ function matchesSearch(record, query){
   return (record.name||'').toLowerCase().includes(q) || (record.phone||'').replace(/\s/g,'').includes(q.replace(/\s/g,''));
 }
 
+function ratingCell(ratingsReceived){
+  const arr = ratingsReceived || [];
+  if (!arr.length) return '<span style="color:var(--ink-soft);font-size:11px;">No ratings</span>';
+  const avg = Math.round((arr.reduce((s,r)=>s+r.stars,0) / arr.length) * 10) / 10;
+  return `★ ${avg} <span style="color:var(--ink-soft);font-size:11px;">(${arr.length})</span>`;
+}
 function renderCaptainsTable(){
   const query = document.getElementById('captainSearch').value;
   const list = allCaptains.filter(cap => matchesSearch(cap, query));
@@ -313,11 +319,12 @@ function renderCaptainsTable(){
       <td>${vehicleChips}</td>
       <td class="route-tag">${cap.currentPoint && POINTS[cap.currentPoint] ? POINTS[cap.currentPoint].short : '—'}</td>
       <td><span class="badge ${cap.status}">${cap.status}</span></td>
+      <td>${ratingCell(cap.ratingsReceived)}</td>
       <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
       <td class="mono">${cap.earnings} SAR</td>
       <td>${captainActionButton(cap)}</td>
     </tr>`;
-  }).join('') : `<tr class="empty-row"><td colspan="7">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
+  }).join('') : `<tr class="empty-row"><td colspan="8">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
 }
 
 function renderCustomersTable(){
@@ -329,9 +336,10 @@ function renderCustomersTable(){
       <td class="mono">${cust.phone}</td>
       <td>${cust.gender==='men'?'♂ Man':'♀ Woman'}</td>
       <td><span class="badge ${cust.accountStatus||'active'}">${cust.accountStatus||'active'}</span></td>
+      <td>${ratingCell(cust.ratingsReceived)}</td>
       <td class="mono">${cust.tripHistory.length}</td>
       <td>${customerActionButton(cust)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">${query ? 'No customers match "'+query+'".' : 'No customers have registered yet.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">${query ? 'No customers match "'+query+'".' : 'No customers have registered yet.'}</td></tr>`;
 }
 
 function render(data){
