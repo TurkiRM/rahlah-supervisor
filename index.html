@@ -242,15 +242,29 @@ async function enterDashboard(){
 }
 async function saveSupportWhatsApp(){
   const value = document.getElementById('supportWhatsAppInput').value.trim();
+  let res;
   try{
-    const res = await fetch(API_BASE + '/api/supervisor/settings', {
+    res = await fetch(API_BASE + '/api/supervisor/settings', {
       method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
       body: JSON.stringify({ supportWhatsApp: value }),
     });
-    const data = await res.json();
-    if (!res.ok){ alert(data.error || 'Could not save.'); return; }
-    alert('Support contact updated — takes effect immediately in both apps.');
-  } catch(e){ alert("Couldn't reach the server."); }
+  } catch(e){
+    alert("Couldn't reach the server at all — check your internet connection.");
+    return;
+  }
+  let data;
+  try{
+    data = await res.json();
+  } catch(e){
+    // The server responded but not with JSON — almost always means this
+    // specific route doesn't exist on whatever's actually deployed (a 404
+    // page is HTML, not JSON). Distinct from a real network failure, and
+    // worth saying so plainly instead of a generic "couldn't reach" message.
+    alert(`The server responded unexpectedly (status ${res.status}). This usually means the backend hasn't been redeployed with this feature yet — make sure the latest rahlah-backend code is live on Render.`);
+    return;
+  }
+  if (!res.ok){ alert(data.error || 'Could not save.'); return; }
+  alert('Support contact updated — takes effect immediately in both apps.');
 }
 
 /* ---------- live fleet map ---------- */
