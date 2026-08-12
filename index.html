@@ -124,6 +124,13 @@
 
   <div class="stat-grid" id="statGrid"></div>
 
+  <div class="section-title">Support contact</div>
+  <p style="font-size:13px;color:var(--ink-soft);margin:-6px 0 10px;">Shown as a "Help" WhatsApp button in both the customer and captain apps. Changing this here takes effect immediately, no app update needed.</p>
+  <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
+    <input type="text" id="supportWhatsAppInput" placeholder="+9665xxxxxxxx" style="flex:1;min-width:220px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
+    <button class="cta gold" style="margin:0;width:auto;padding:10px 20px;" onclick="saveSupportWhatsApp()">Save</button>
+  </div>
+
   <div class="section-title">Live fleet map <span class="count" id="fleetCount">0</span></div>
   <div class="map-card">
     <div id="fleetMap"></div>
@@ -227,9 +234,23 @@ async function enterDashboard(){
   if (!Object.keys(VEHICLES).length) VEHICLES = await fetch(API_BASE + '/api/vehicles').then(r=>r.json());
   POINTS = await fetch(API_BASE + '/api/points').then(r=>r.json()).catch(()=>POINTS);
   DIRECTIONS = await fetch(API_BASE + '/api/directions').then(r=>r.json()).catch(()=>DIRECTIONS);
+  const settings = await fetch(API_BASE + '/api/settings').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('supportWhatsAppInput').value = settings.supportWhatsApp || '';
   ensureFleetMap();
   refresh();
   setInterval(refresh, 4000);
+}
+async function saveSupportWhatsApp(){
+  const value = document.getElementById('supportWhatsAppInput').value.trim();
+  try{
+    const res = await fetch(API_BASE + '/api/supervisor/settings', {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ supportWhatsApp: value }),
+    });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not save.'); return; }
+    alert('Support contact updated — takes effect immediately in both apps.');
+  } catch(e){ alert("Couldn't reach the server."); }
 }
 
 /* ---------- live fleet map ---------- */
