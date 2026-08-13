@@ -132,13 +132,20 @@
   </div>
 
   <div class="section-title">Supervisor accounts <span class="count" id="supervisorsCount">0</span></div>
-  <p style="font-size:13px;color:var(--ink-soft);margin:-6px 0 10px;">There's no public sign-up for this role — only an existing supervisor can add another.</p>
+  <p id="addSupervisorHint" style="font-size:13px;color:var(--ink-soft);margin:-6px 0 10px;">There's no public sign-up for this role — only the main supervisor can add another.</p>
   <div id="supervisorsList" style="margin-bottom:14px;"></div>
-  <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
+  <div id="addSupervisorForm" style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
     <input type="text" id="newSupName" placeholder="Name" style="flex:1;min-width:120px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
     <input type="text" id="newSupUsername" placeholder="Username" style="flex:1;min-width:120px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
     <input type="password" id="newSupPassword" placeholder="Password" style="flex:1;min-width:120px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
     <button class="cta gold" style="margin:0;width:auto;padding:10px 20px;" onclick="addSupervisor()">Add supervisor</button>
+  </div>
+
+  <div class="section-title">Change my password</div>
+  <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
+    <input type="password" id="mySupCurrentPassword" placeholder="Current password" style="flex:1;min-width:150px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
+    <input type="password" id="mySupNewPassword" placeholder="New password" style="flex:1;min-width:150px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
+    <button class="cta ghost" style="margin:0;width:auto;padding:10px 20px;" onclick="changeMySupervisorPassword()">Update password</button>
   </div>
 
   <div class="section-title">Live fleet map <span class="count" id="fleetCount">0</span></div>
@@ -277,16 +284,51 @@ async function saveSupportWhatsApp(){
   alert('Support contact updated — takes effect immediately in both apps.');
 }
 
-function renderSupervisorsList(supervisors, myId){
+let myIsRoot = false;
+function renderSupervisorsList(supervisors, myId, amIRoot){
+  myIsRoot = amIRoot;
   document.getElementById('supervisorsCount').textContent = supervisors.length;
+  document.getElementById('addSupervisorForm').style.display = amIRoot ? 'flex' : 'none';
+  document.getElementById('addSupervisorHint').textContent = amIRoot
+    ? 'There\'s no public sign-up for this role — only the main supervisor can add another.'
+    : 'Only the main supervisor account can add, remove, or reset the password of other supervisors.';
   document.getElementById('supervisorsList').innerHTML = supervisors.map(s => {
     const safeName = s.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const isMe = s.id === myId;
+    const actions = (!isMe && amIRoot) ? `
+        <button class="action-btn" onclick="resetSupervisorPassword('${s.id}', '${safeName}')">Reset password</button>
+        <button class="action-btn danger" onclick="removeSupervisor('${s.id}', '${safeName}')">Remove</button>` : '';
     return `
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px;">
-      <div><strong style="font-family:'Space Grotesk';font-size:13.5px;">${s.name}</strong> <span style="color:var(--ink-soft);font-size:12px;">@${s.username}</span>${s.id===myId ? ' <span style="font-size:11px;color:var(--brand);font-weight:600;">(you)</span>' : ''}</div>
-      ${s.id!==myId ? `<button class="action-btn danger" onclick="removeSupervisor('${s.id}', '${safeName}')">Remove</button>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <div><strong style="font-family:'Space Grotesk';font-size:13.5px;">${s.name}</strong> <span style="color:var(--ink-soft);font-size:12px;">@${s.username}</span>${s.isRoot ? ' <span style="font-size:10.5px;color:var(--gold-deep,#8A6D1D);font-weight:600;">MAIN</span>' : ''}${isMe ? ' <span style="font-size:11px;color:var(--brand);font-weight:600;">(you)</span>' : ''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${actions}</div>
     </div>`;
   }).join('');
+}
+async function resetSupervisorPassword(id, name){
+  if (!confirm(`Reset ${name}'s password? A new temporary password will be generated — you'll need to relay it to them directly.`)) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/supervisors/${id}/reset-password`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not reset password.'); return; }
+    alert(`New temporary password for ${name}: ${data.tempPassword}\n\nShare this with them directly. They should change it once logged in.`);
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+async function changeMySupervisorPassword(){
+  const currentPassword = document.getElementById('mySupCurrentPassword').value;
+  const newPassword = document.getElementById('mySupNewPassword').value;
+  if (!currentPassword || !newPassword){ alert('Enter both your current and new password.'); return; }
+  try{
+    const res = await fetch(API_BASE + '/api/supervisor/change-password', {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not update password.'); return; }
+    document.getElementById('mySupCurrentPassword').value = '';
+    document.getElementById('mySupNewPassword').value = '';
+    alert('Password updated.');
+  } catch(e){ alert("Couldn't reach the server."); }
 }
 async function addSupervisor(){
   const name = document.getElementById('newSupName').value.trim();
@@ -436,7 +478,7 @@ function render(data){
   const now = data.now;
 
   updateFleetMap(captains);
-  renderSupervisorsList(data.supervisors || [], data.myId);
+  renderSupervisorsList(data.supervisors || [], data.myId, !!data.amIRoot);
 
   const onlineCaptains = captains.filter(c=>c.status==='online').length;
   const idleCaptains = captains.filter(c=>c.status==='online' && !c.currentCarId).length;
