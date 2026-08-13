@@ -131,6 +131,16 @@
     <button class="cta gold" style="margin:0;width:auto;padding:10px 20px;" onclick="saveSupportWhatsApp()">Save</button>
   </div>
 
+  <div class="section-title">Supervisor accounts <span class="count" id="supervisorsCount">0</span></div>
+  <p style="font-size:13px;color:var(--ink-soft);margin:-6px 0 10px;">There's no public sign-up for this role — only an existing supervisor can add another.</p>
+  <div id="supervisorsList" style="margin-bottom:14px;"></div>
+  <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
+    <input type="text" id="newSupName" placeholder="Name" style="flex:1;min-width:120px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
+    <input type="text" id="newSupUsername" placeholder="Username" style="flex:1;min-width:120px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
+    <input type="password" id="newSupPassword" placeholder="Password" style="flex:1;min-width:120px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:13px;" />
+    <button class="cta gold" style="margin:0;width:auto;padding:10px 20px;" onclick="addSupervisor()">Add supervisor</button>
+  </div>
+
   <div class="section-title">Live fleet map <span class="count" id="fleetCount">0</span></div>
   <div class="map-card">
     <div id="fleetMap"></div>
@@ -267,6 +277,48 @@ async function saveSupportWhatsApp(){
   alert('Support contact updated — takes effect immediately in both apps.');
 }
 
+function renderSupervisorsList(supervisors, myId){
+  document.getElementById('supervisorsCount').textContent = supervisors.length;
+  document.getElementById('supervisorsList').innerHTML = supervisors.map(s => {
+    const safeName = s.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px;">
+      <div><strong style="font-family:'Space Grotesk';font-size:13.5px;">${s.name}</strong> <span style="color:var(--ink-soft);font-size:12px;">@${s.username}</span>${s.id===myId ? ' <span style="font-size:11px;color:var(--brand);font-weight:600;">(you)</span>' : ''}</div>
+      ${s.id!==myId ? `<button class="action-btn danger" onclick="removeSupervisor('${s.id}', '${safeName}')">Remove</button>` : ''}
+    </div>`;
+  }).join('');
+}
+async function addSupervisor(){
+  const name = document.getElementById('newSupName').value.trim();
+  const username = document.getElementById('newSupUsername').value.trim();
+  const password = document.getElementById('newSupPassword').value;
+  if (!name || !username || !password){ alert('Fill in name, username, and password.'); return; }
+  try{
+    const res = await fetch(API_BASE + '/api/supervisor/supervisors', {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ name, username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not add supervisor.'); return; }
+    document.getElementById('newSupName').value = '';
+    document.getElementById('newSupUsername').value = '';
+    document.getElementById('newSupPassword').value = '';
+    alert(`Added ${data.supervisor.name}. Share their username and password with them directly — there's no other way for them to get in.`);
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+async function removeSupervisor(id, name){
+  if (!confirm(`Remove ${name}'s supervisor access? This takes effect immediately, even if they're currently logged in.`)) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/supervisors/${id}/remove`, {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token },
+    });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not remove.'); return; }
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+
 /* ---------- live fleet map ---------- */
 let fleetMap = null;
 let captainMarkers = {}; // captainId -> Leaflet marker
@@ -384,6 +436,7 @@ function render(data){
   const now = data.now;
 
   updateFleetMap(captains);
+  renderSupervisorsList(data.supervisors || [], data.myId);
 
   const onlineCaptains = captains.filter(c=>c.status==='online').length;
   const idleCaptains = captains.filter(c=>c.status==='online' && !c.currentCarId).length;
