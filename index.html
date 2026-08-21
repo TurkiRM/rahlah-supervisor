@@ -573,16 +573,29 @@ async function submitWalletAdjust(){
   document.getElementById('walletAdjustError').innerHTML = '';
   if (!amount){ document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">Enter a non-zero amount.</div>'; return; }
   if (!note){ document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">A note is required.</div>'; return; }
+  let res;
   try{
-    const res = await fetch(`${API_BASE}/api/supervisor/customer/${walletAdjustCustomerId}/wallet-adjust`, {
+    res = await fetch(`${API_BASE}/api/supervisor/customer/${walletAdjustCustomerId}/wallet-adjust`, {
       method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
       body: JSON.stringify({ amount, note }),
     });
-    const data = await res.json();
-    if (!res.ok){ document.getElementById('walletAdjustError').innerHTML = `<div class="error-box">${data.error}</div>`; return; }
-    closeWalletAdjustModal();
-    refresh();
-  } catch(e){ document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">Couldn\'t reach the server.</div>'; }
+  } catch(e){
+    document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">Couldn\'t reach the server at all — check your internet connection.</div>';
+    return;
+  }
+  let data;
+  try{
+    data = await res.json();
+  } catch(e){
+    // Response came back but wasn't JSON — almost always means this route
+    // doesn't exist on whatever backend is actually deployed (a 404 page is
+    // HTML, not JSON). Distinct from a real network failure.
+    document.getElementById('walletAdjustError').innerHTML = `<div class="error-box">The server responded unexpectedly (status ${res.status}). This usually means the backend hasn't been redeployed with this feature yet.</div>`;
+    return;
+  }
+  if (!res.ok){ document.getElementById('walletAdjustError').innerHTML = `<div class="error-box">${data.error}</div>`; return; }
+  closeWalletAdjustModal();
+  refresh();
 }
 
 function viewPayoutHistory(captainId){
@@ -620,21 +633,41 @@ function renderPendingPayouts(){
 }
 async function markPayoutPaid(captainId, requestId){
   if (!confirm("Mark this payout as paid? Only do this after you've actually sent the money.")) return;
+  let res;
   try{
-    const res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/payout/${requestId}/mark-paid`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
-    const data = await res.json();
-    if (!res.ok){ alert(data.error || 'Could not mark as paid.'); return; }
-    refresh();
-  } catch(e){ alert("Couldn't reach the server."); }
+    res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/payout/${requestId}/mark-paid`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+  } catch(e){
+    alert("Couldn't reach the server at all — check your internet connection.");
+    return;
+  }
+  let data;
+  try{
+    data = await res.json();
+  } catch(e){
+    alert(`The server responded unexpectedly (status ${res.status}). This usually means the backend hasn't been redeployed with this feature yet.`);
+    return;
+  }
+  if (!res.ok){ alert(data.error || 'Could not mark as paid.'); return; }
+  refresh();
 }
 async function cancelPayoutRequest(captainId, requestId){
   if (!confirm('Cancel this payout request? The amount will be refunded back to the captain\'s available wallet balance.')) return;
+  let res;
   try{
-    const res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/payout/${requestId}/cancel`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
-    const data = await res.json();
-    if (!res.ok){ alert(data.error || 'Could not cancel.'); return; }
-    refresh();
-  } catch(e){ alert("Couldn't reach the server."); }
+    res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/payout/${requestId}/cancel`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+  } catch(e){
+    alert("Couldn't reach the server at all — check your internet connection.");
+    return;
+  }
+  let data;
+  try{
+    data = await res.json();
+  } catch(e){
+    alert(`The server responded unexpectedly (status ${res.status}). This usually means the backend hasn't been redeployed with this feature yet.`);
+    return;
+  }
+  if (!res.ok){ alert(data.error || 'Could not cancel.'); return; }
+  refresh();
 }
 function renderCaptainsTable(){
   const query = document.getElementById('captainSearch').value;
