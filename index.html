@@ -161,6 +161,9 @@
   <div class="section-title">Pending captain approvals <span class="count" id="pendingApprovalCount">0</span></div>
   <div id="pendingApprovalList"></div>
 
+  <div class="section-title">Pending payouts <span class="count" id="pendingPayoutCount">0</span></div>
+  <div id="pendingPayoutList"></div>
+
   <div class="section-title">Live cars <span class="count" id="carsCount">0</span></div>
   <table><thead><tr>
     <th>Vehicle</th><th>Mode</th><th>Route</th><th>Seats</th><th>Status</th><th>Captain</th><th>Age</th>
@@ -169,12 +172,12 @@
   <div class="section-title">Captains <span class="count" id="captainsCount">0</span></div>
   <input type="text" class="search-box" id="captainSearch" placeholder="Search by name or phone…" oninput="renderCaptainsTable()" />
   <table><thead><tr>
-    <th>Name</th><th>Vehicles</th><th>At point</th><th>Duty</th><th>Rating</th><th>Current car</th><th>Earnings today</th><th>Action</th>
+    <th>Name</th><th>Vehicles</th><th>At point</th><th>Duty</th><th>Rating</th><th>Current car</th><th>Earnings today</th><th>Wallet</th><th>Action</th>
   </tr></thead><tbody id="captainsBody"></tbody></table>
 
   <div class="section-title">Customers <span class="count" id="customersCount">0</span></div>
   <input type="text" class="search-box" id="customerSearch" placeholder="Search by name or phone…" oninput="renderCustomersTable()" />
-  <table><thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Account</th><th>Rating</th><th>Trips</th><th>Action</th></tr></thead><tbody id="customersBody"></tbody></table>
+  <table><thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Account</th><th>Rating</th><th>Trips</th><th>Wallet</th><th>Action</th></tr></thead><tbody id="customersBody"></tbody></table>
 
   <div class="section-title">Pending private bookings <span class="count" id="pendingCount">0</span></div>
   <table><thead><tr><th>Route / vehicle</th><th>Waiting</th></tr></thead><tbody id="pendingBody"></tbody></table>
@@ -203,6 +206,32 @@
       <button class="action-btn" onclick="closeFeedbackModal()">Close</button>
     </div>
     <div id="feedbackModalBody"></div>
+  </div>
+</div>
+
+<div id="walletAdjustModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this) closeWalletAdjustModal()">
+  <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:420px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="section-title" style="margin:0;" id="walletAdjustTitle">Adjust wallet</div>
+      <button class="action-btn" onclick="closeWalletAdjustModal()">Close</button>
+    </div>
+    <p style="font-size:13px;color:var(--ink-soft);margin:0 0 14px;">Positive to credit, negative to debit. A note is required — this is the only record of why the balance changed.</p>
+    <div style="margin-bottom:10px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-soft);display:block;margin-bottom:6px;">Amount (SAR)</label>
+      <input type="number" id="walletAdjustAmount" placeholder="e.g. 50 or -10" style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:14px;box-sizing:border-box;" /></div>
+    <div style="margin-bottom:14px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-soft);display:block;margin-bottom:6px;">Note</label>
+      <input type="text" id="walletAdjustNote" placeholder="e.g. Received cash in person" style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;font-family:'Inter';font-size:14px;box-sizing:border-box;" /></div>
+    <div id="walletAdjustError"></div>
+    <button class="cta gold" style="width:100%;" onclick="submitWalletAdjust()">Save adjustment</button>
+  </div>
+</div>
+
+<div id="payoutHistoryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this) closePayoutHistoryModal()">
+  <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:480px;max-height:85vh;overflow:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="section-title" style="margin:0;" id="payoutHistoryTitle">Payout history</div>
+      <button class="action-btn" onclick="closePayoutHistoryModal()">Close</button>
+    </div>
+    <div id="payoutHistoryBody"></div>
   </div>
 </div>
 
@@ -526,6 +555,87 @@ function viewFeedback(id, role){
   document.getElementById('feedbackModal').style.display = 'flex';
 }
 function closeFeedbackModal(){ document.getElementById('feedbackModal').style.display = 'none'; }
+
+/* ---------- wallets & payouts ---------- */
+let walletAdjustCustomerId = null;
+function openWalletAdjust(id, name){
+  walletAdjustCustomerId = id;
+  document.getElementById('walletAdjustTitle').textContent = `Adjust wallet — ${name}`;
+  document.getElementById('walletAdjustAmount').value = '';
+  document.getElementById('walletAdjustNote').value = '';
+  document.getElementById('walletAdjustError').innerHTML = '';
+  document.getElementById('walletAdjustModal').style.display = 'flex';
+}
+function closeWalletAdjustModal(){ document.getElementById('walletAdjustModal').style.display = 'none'; }
+async function submitWalletAdjust(){
+  const amount = Number(document.getElementById('walletAdjustAmount').value);
+  const note = document.getElementById('walletAdjustNote').value.trim();
+  document.getElementById('walletAdjustError').innerHTML = '';
+  if (!amount){ document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">Enter a non-zero amount.</div>'; return; }
+  if (!note){ document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">A note is required.</div>'; return; }
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/customer/${walletAdjustCustomerId}/wallet-adjust`, {
+      method:'POST', headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ amount, note }),
+    });
+    const data = await res.json();
+    if (!res.ok){ document.getElementById('walletAdjustError').innerHTML = `<div class="error-box">${data.error}</div>`; return; }
+    closeWalletAdjustModal();
+    refresh();
+  } catch(e){ document.getElementById('walletAdjustError').innerHTML = '<div class="error-box">Couldn\'t reach the server.</div>'; }
+}
+
+function viewPayoutHistory(captainId){
+  const cap = allCaptains.find(c => c.id === captainId);
+  const requests = (cap && cap.payoutRequests) || [];
+  document.getElementById('payoutHistoryTitle').textContent = `Payout history — ${cap ? cap.name : ''}`;
+  document.getElementById('payoutHistoryBody').innerHTML = requests.length ? requests.map(p => `
+    <div style="border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+      <div><div class="mono" style="font-weight:600;">${p.amount} SAR</div><div style="font-size:11px;color:var(--ink-soft);">${fmtTime(p.requestedAt)}${p.paidAt ? ' · paid ' + fmtTime(p.paidAt) : ''}</div></div>
+      <span class="badge ${p.status}">${p.status}</span>
+    </div>
+  `).join('') : '<p style="font-size:13px;color:var(--ink-soft);">No payout requests yet.</p>';
+  document.getElementById('payoutHistoryModal').style.display = 'flex';
+}
+function closePayoutHistoryModal(){ document.getElementById('payoutHistoryModal').style.display = 'none'; }
+
+function renderPendingPayouts(){
+  const pending = [];
+  allCaptains.forEach(cap => {
+    (cap.payoutRequests || []).forEach(p => {
+      if (p.status === 'pending') pending.push({ cap, request: p });
+    });
+  });
+  document.getElementById('pendingPayoutCount').textContent = pending.length;
+  const wrap = document.getElementById('pendingPayoutList');
+  wrap.innerHTML = pending.length ? pending.map(({cap, request}) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:8px;flex-wrap:wrap;gap:10px;">
+      <div><strong style="font-family:'Space Grotesk';font-size:13.5px;">${cap.name}</strong> <span class="mono" style="color:var(--ink-soft);font-size:12px;">${cap.phone}</span><div class="mono" style="font-weight:600;margin-top:2px;">${request.amount} SAR</div></div>
+      <div style="display:flex;gap:8px;">
+        <button class="cta gold" style="margin:0;width:auto;padding:8px 16px;" onclick="markPayoutPaid('${cap.id}','${request.id}')">Mark paid</button>
+        <button class="action-btn danger" onclick="cancelPayoutRequest('${cap.id}','${request.id}')">Cancel</button>
+      </div>
+    </div>
+  `).join('') : '<p style="font-size:13px;color:var(--ink-soft);">No pending payout requests.</p>';
+}
+async function markPayoutPaid(captainId, requestId){
+  if (!confirm("Mark this payout as paid? Only do this after you've actually sent the money.")) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/payout/${requestId}/mark-paid`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not mark as paid.'); return; }
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
+async function cancelPayoutRequest(captainId, requestId){
+  if (!confirm('Cancel this payout request? The amount will be refunded back to the captain\'s available wallet balance.')) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/supervisor/captain/${captainId}/payout/${requestId}/cancel`, { method:'POST', headers:{ 'Authorization':'Bearer '+token } });
+    const data = await res.json();
+    if (!res.ok){ alert(data.error || 'Could not cancel.'); return; }
+    refresh();
+  } catch(e){ alert("Couldn't reach the server."); }
+}
 function renderCaptainsTable(){
   const query = document.getElementById('captainSearch').value;
   const list = allCaptains.filter(cap => matchesSearch(cap, query));
@@ -542,15 +652,18 @@ function renderCaptainsTable(){
       <td>${ratingCell(cap.id, 'captain', cap.ratingsReceived)}</td>
       <td>${cap.currentCarId ? '<span class="mono">assigned</span>' : (cap.status==='online' ? 'idle' : '—')}</td>
       <td class="mono">${cap.earnings} SAR</td>
+      <td class="mono">${cap.walletBalance||0} SAR <button class="action-btn" style="margin-inline-start:4px;" onclick="viewPayoutHistory('${cap.id}')">History</button></td>
       <td>${captainActionButton(cap)}</td>
     </tr>`;
-  }).join('') : `<tr class="empty-row"><td colspan="8">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
+  }).join('') : `<tr class="empty-row"><td colspan="9">${query ? 'No captains match "'+query+'".' : 'No captains have registered yet.'}</td></tr>`;
 }
 
 function renderCustomersTable(){
   const query = document.getElementById('customerSearch').value;
   const list = allCustomers.filter(cust => matchesSearch(cust, query));
-  document.getElementById('customersBody').innerHTML = list.length ? list.map(cust => `
+  document.getElementById('customersBody').innerHTML = list.length ? list.map(cust => {
+    const safeName = cust.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `
     <tr>
       <td>${cust.name}</td>
       <td class="mono">${cust.phone}</td>
@@ -558,8 +671,10 @@ function renderCustomersTable(){
       <td><span class="badge ${cust.accountStatus||'active'}">${cust.accountStatus||'active'}</span></td>
       <td>${ratingCell(cust.id, 'customer', cust.ratingsReceived)}</td>
       <td class="mono">${cust.tripHistory.length}</td>
+      <td class="mono">${cust.walletBalance||0} SAR <button class="action-btn" style="margin-inline-start:4px;" onclick="openWalletAdjust('${cust.id}', '${safeName}')">Adjust</button></td>
       <td>${customerActionButton(cust)}</td>
-    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">${query ? 'No customers match "'+query+'".' : 'No customers have registered yet.'}</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr class="empty-row"><td colspan="8">${query ? 'No customers match "'+query+'".' : 'No customers have registered yet.'}</td></tr>`;
 }
 
 function render(data){
@@ -627,6 +742,7 @@ function render(data){
   document.getElementById('captainsCount').textContent = captains.length;
   allCaptains = sortedCaptains;
   renderCaptainsTable();
+  renderPendingPayouts();
 
   allCustomers = [...customers].sort((a,b)=> b.createdAt - a.createdAt); // newest first — easiest to find who just signed up
   document.getElementById('customersCount').textContent = customers.length;
